@@ -53,12 +53,13 @@ def run_prediction(ticker):
     
     # 最新データで明日を予測
     latest_x = X.tail(1)
+    # 1. 予測結果
     prediction = model.predict(latest_x)[0]
-    probabilities = model.predict_proba(latest_x)[0]
-    confidence = probabilities[prediction]
-    
-    # --- XAI: 指標の重要度を辞書にする ---
+    # 2. 自信度
+    confidence = model.predict_proba(latest_x)[0][prediction]
+    # 3. 各指標の重要度 (XAI)
     importances = dict(zip(feature_names, model.feature_importances_))
+    # 4. 【追加】最新の指標データそのもの
+    latest_values = latest_x.iloc[0].to_dict()
     
-    # 3つの値を返す: (予測結果, 自信度, 重要度辞書)
-    return prediction, confidence, importances
+    return prediction, confidence, importances, latest_values

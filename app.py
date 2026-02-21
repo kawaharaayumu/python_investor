@@ -153,33 +153,52 @@ if search_button or ticker:
         st.subheader("🤖 AIトレンド予測 & 判断根拠 (XAI)")
         st.write("過去5年間のパターンから、明日の騰落と「何を重視したか」を表示します。")
 
+        # --- AI予測セクション (app.py内) ---
         with st.spinner('AIが判断理由を分析中...'):
             try:
-                # predictor.py から「予測、自信度、重要度」を受け取る
-                pred_result, confidence, importances = predictor.run_prediction(ticker)
-            
-                if pred_result is not None:
-                    col_res, col_imp = st.columns([1, 2]) # 左に結果、右にグラフ
-                    
-                    with col_res:
-                        if pred_result == 1:
-                            st.success("### 予想：📈 上昇")
-                        else:
-                            st.error("### 予想：📉 下落")
-                        st.metric("予測の自信度", f"{confidence*100:.1f} %")
-                        st.progress(float(confidence))
-
-                    with col_imp:
-                        st.write("▼ AIが重視した指標")
-                        # 重要度をデータフレームにしてグラフ化
-                        imp_df = pd.DataFrame({
-                            '指標': importances.keys(),
-                            '重要度': importances.values()
-                        }).sort_values(by='重要度', ascending=True)
-                        st.bar_chart(data=imp_df, x='指標', y='重要度', horizontal=True)
+                # predictor.py から4つのデータを受け取る
+                pred, conf, imps, vals = predictor.run_prediction(ticker)
                 
-                    st.caption("※BB_Position: ボリンジャーバンド内の位置 / MA_Gap: 移動平均乖離 / Return: 前日比")
-                else:
-                    st.warning("データ不足のため予測できませんでした。")
+                if pred is not None:
+                    # 1. まず結果を表示
+                    res_txt = "📈 上昇" if pred == 1 else "📉 下落"
+                    st.subheader(f"AI予測：{res_txt} (自信度: {conf*100:.1f}%)")
+
+                    # 2. 自動解説コメントの生成
+                    comments = []
+                    
+                    # 重要度が最も高い指標を特定
+                    top_feature = max(imps, key=imps.get)
+                    
+                    # --- 指標ごとの解説ロジック ---
+                    if top_feature == 'MA5_Gap':
+                        val = vals['MA5_Gap'] * 100
+                        status = "高く、短期的に買われすぎ" if val > 0 else "低く、短期的に売られすぎ"
+                        comments.append(f"AIは「5日移動平均線からの乖離」を最も重視しました。現在は {val:.1f}% と{status}の状態で、反発の予兆を捉えています。")
+                    
+                    elif top_feature == 'BB_Pos':
+                        val = vals['BB_Pos']
+                        if val > 0.8: status = "ボリンジャーバンドの上限付近にあり、上昇圧力が強い"
+                        elif val < 0.2: status = "ボリンジャーバンドの下限付近にあり、売りの限界に近い"
+                        else: status = "バンドの中央付近におり、安定した推移"
+                        comments.append(f"AIは「ボリンジャーバンド内の位置」に注目しました。現在は {status} と判断しています。")
+
+                    elif top_feature == 'Return':
+                        val = vals['Return'] * 100
+                        comments.append(f"AIは「前日の騰落（{val:.1f}%）」の勢いが、翌日も継続（または反転）するパターンを過去の傾向から読み取っています。")
+
+                    # コメントの表示
+                    st.info(f"🗨️ **AIの解説:** {''.join(comments)}")
+
+                    # 3. グラフ表示（以前のコードと同様）
+                    col1, col2 = st.columns([1, 2])
+                    with col1:
+                        st.write("▼ 指標の現在値")
+                        st.write(f"- 5日乖離: {vals['MA5_Gap']*100:.1f}%")
+                        st.write(f"- BB位置: {vals['BB_Pos']:.2f}")
+                    with col2:
+                        imp_df = pd.DataFrame({'指標': imps.keys(), '重要度': imps.values()}).sort_values(by='重要度')
+                        st.bar_chart(data=imp_df, x='指標', y='重要度', horizontal=True)
+
             except Exception as e:
                 st.error(f"予測中にエラーが発生しました: {e}")
