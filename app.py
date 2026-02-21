@@ -85,10 +85,33 @@ if st.session_state['history']:
 else:
     st.sidebar.write("履歴はまだありません")
 
-# --- 期間設定 ---
+# --- 期間設定 (サイドバー) ---
 st.sidebar.markdown("---")
-start_date = st.sidebar.date_input("開始日", value=datetime.date.today() - datetime.timedelta(days=365))
-end_date = st.sidebar.date_input("終了日", value=datetime.date.today())
+st.sidebar.subheader("📅 表示期間")
+
+# 選択肢をリストで用意
+period_options = {
+    "1ヶ月": 30,
+    "3ヶ月": 90,
+    "6ヶ月": 180,
+    "1年": 365,
+    "2年": 730,
+    "5年": 1825
+}
+
+# セレクトボックスで選択（キーボードが出ない）
+selected_period_label = st.sidebar.selectbox(
+    "期間を選択",
+    options=list(period_options.keys()),
+    index=3  # デフォルトで「1年」を選択
+)
+
+# 選択されたラベルから日数を取得して開始日を計算
+days = period_options[selected_period_label]
+end_date = datetime.date.today()
+start_date = end_date - datetime.timedelta(days=days)
+
+# 更新ボタン
 search_button = st.sidebar.button("チャートを更新", type="primary")
 
 # --- 【重要】銘柄の「永続」追加機能 ---
