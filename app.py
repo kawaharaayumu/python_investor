@@ -5,6 +5,7 @@ import pandas as pd
 import datetime
 import os
 from streamlit_local_storage import LocalStorage
+import predictor
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 
@@ -105,3 +106,30 @@ if search_button or ticker:
         # 描画
         fig, _ = mpf.plot(df, type='candle', style='charles', mav=(5, 25), volume=True, returnfig=True, figsize=(15, 8))
         st.pyplot(fig)
+        
+        st.markdown("---")
+        st.subheader("🤖 AIトレンド予測")
+        st.write("過去5年間の値動きパターンから、明日の「上昇・下落」を予測します。")
+
+        # 予測の実行（重い処理なのでロード中を表示）
+        with st.spinner('AIがパターンを分析中...'):
+            try:
+                pred_result, confidence = predictor.run_prediction(ticker)
+            
+                if pred_result is not None:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if pred_result == 1:
+                            st.success("### 予想：📈 上昇 (BUY)")
+                        else:
+                            st.error("### 予想：📉 下落 (SELL)")
+
+                    with c2:
+                        st.metric("予測の自信度", f"{confidence*100:.1f} %")
+                        st.progress(confidence) # 視覚的なバーを表示
+                
+                    st.info("💡 **解説:** このモデルは移動平均との乖離や直近のボラティリティを元に判断しています。")
+                else:
+                    st.warning("データ不足のため予測できませんでした。")
+            except Exception as e:
+                st.error(f"予測中にエラーが発生しました: {e}")
