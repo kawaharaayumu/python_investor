@@ -43,6 +43,33 @@ if 'history' not in st.session_state:
 
 st.title("Stock Price Analyzer 📈")
 
+# --- 💡 グラフの見方ガイド ---
+with st.expander("📖 グラフの見方・用語解説"):
+    st.markdown("""
+    ### 1. ローソク足チャートの詳細
+    1本の棒（ローソク）が、ある期間（1日）の「始値・高値・安値・終値」を表します。
+    - **緑色のローソク（陽線）**: 始値より**終値が高い**（値上がり）。
+    - **赤色のローソク（陰線）**: 始値より**終値が低い**（値下がり）。
+    - **ヒゲ（上下に伸びる細い線）**: その日の高値と安値を示します。
+        - **長い下ヒゲ**: 一時大きく売られたが、最後は買い戻された「反発の兆し」。
+        - **長い上ヒゲ**: 一時大きく買われたが、最後は売り押された「上昇の失速」。
+
+    ### 2. 移動平均線 (MA) の色
+    グラフに引かれている3本の線の色は以下の通りです。
+    - <span style="color:#0000FF">■</span> **1番目の線（5日線）**: 青色。短期的な勢い。
+    - <span style="color:#FF0000">■</span> **2番目の線（25日線）**: 赤色。1ヶ月の平均的な強さ。
+    - <span style="color:#00FF00">■</span> **3番目の線（75日線）**: 緑色。3ヶ月の大きなトレンド。
+
+    ### 3. 下段：出来高（Volume）
+    棒が長いほど、その日に活発に売買が行われたことを示します。
+    - **見方**: 株価が上がっている時に出来高も増えていれば、その上昇は「本物」である可能性が高いです。
+
+    ### 4. ボリンジャーバンド (グレーの境界線)
+    - 株価が統計的に収まりやすい「枠」です。
+    - **+2σ（上の線）**: 買われすぎの目安。ここで反転下落するか、突き抜けて急騰するか。
+    - **-2σ（下の線）**: 売られすぎの目安。ここが底打ちのサインになることが多いです。
+    """, unsafe_allow_html=True)
+
 # --- サイドバー ---
 st.sidebar.header("🔍 銘柄検索")
 
@@ -174,11 +201,18 @@ if search_button or ticker:
         else:
             df_plot = df
 
-        # 描画実行 (df ではなく df_plot を使う)
-        fig, _ = mpf.plot(
-            df_plot, type='candle', style='charles', 
-            mav=(5, 25, 75), addplot=add_plots, 
-            volume=True, returnfig=True, figsize=(15, 8)
+        # --- 移動平均線の色を個別に指定する ---
+        # mavcolors で 5日, 25日, 75日 の色を順番に指定します
+        fig, axlist = mpf.plot(
+            df_plot, 
+            type='candle', 
+            style='yahoo',    # ベースのスタイル
+            mav=(5, 25, 75), 
+            mavcolors=('blue', 'red', 'green'), # ここで色を指定！
+            addplot=add_plots, 
+            volume=True, 
+            returnfig=True, 
+            figsize=(15, 8)
         )
         st.pyplot(fig)
         
