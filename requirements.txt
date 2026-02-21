@@ -4,3 +4,4 @@ streamlit
 matplotlib
 pandas
 streamlit-local-storage
+scikit-learn
