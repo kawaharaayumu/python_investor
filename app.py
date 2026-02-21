@@ -57,13 +57,33 @@ target_row = full_df[full_df['display'] == selected_display].iloc[0]
 ticker = target_row['code']
 display_name = target_row['name']
 
-# --- 最近見た銘柄 (Session State) ---
+# --- 【ここを追加】選択された瞬間に履歴に追加するロジック ---
+if ticker:
+    hist_item = (display_name, ticker)
+    # すでに同じ銘柄が履歴にある場合は一度削除（最新として先頭に持ってくるため）
+    if hist_item in st.session_state['history']:
+        st.session_state['history'].remove(hist_item)
+    
+    # 履歴の先頭に追加
+    st.session_state['history'].insert(0, hist_item)
+    
+    # 履歴は最大5件までに制限
+    st.session_state['history'] = st.session_state['history'][:5]
+
+# --- 最近見た銘柄の表示 ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("🕒 最近見た銘柄")
-for h_name, h_code in st.session_state['history']:
-    if st.sidebar.button(f"{h_name} ({h_code})", key=f"h_{h_code}"):
-        ticker = h_code
-        display_name = h_name
+if st.session_state['history']:
+    for h_name, h_code in st.session_state['history']:
+        # 履歴ボタンを押した時の処理
+        if st.sidebar.button(f"{h_name} ({h_code})", key=f"h_{h_code}"):
+            # ボタンが押されたらその銘柄を現在の表示対象にする
+            ticker = h_code
+            display_name = h_name
+            # ※ボタンを押した際も即座に再描画させるために rerun を使うとよりスムーズです
+            st.rerun()
+else:
+    st.sidebar.write("履歴はまだありません")
 
 # --- 期間設定 ---
 st.sidebar.markdown("---")
