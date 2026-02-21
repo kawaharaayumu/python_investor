@@ -63,3 +63,32 @@ def run_prediction(ticker):
     latest_values = latest_x.iloc[0].to_dict()
     
     return prediction, confidence, importances, latest_values
+
+def run_backtest(ticker):
+    """過去100日間の予測的中率を計算する"""
+    df = yf.download(ticker, period="2y", progress=False)
+    if hasattr(df.columns, 'levels'): df.columns = df.columns.get_level_values(0)
+    
+    processed_df = prepare_features(df)
+    feature_names = ['MA5_Gap', 'MA25_Gap', 'BB_Pos', 'Return']
+    
+    # テスト対象（直近100日）
+    test_days = 100
+    if len(processed_df) < test_days + 50:
+        return None
+
+    results = []
+    # 過去100日分、1日ずつずらしながら学習と予測を繰り返す（簡易バックテスト）
+    for i in range(test_days, 0, -1):
+        train_data = processed_df.iloc[:-i-1]
+        test_point = processed_df.iloc[-i-1 : -i] # その日のデータ
+        actual_next_move = processed_df.iloc[-i]['Target'] # 実際の翌日の動き
+        
+        model = RandomForestClassifier(n_estimators=50, random_state=42)
+        model.fit(train_data[feature_names], train_data['Target'])
+        
+        pred = model.predict(test_point[feature_names])[0]
+        results.append(pred == actual_next_move)
+    
+    accuracy = sum(results) / len(results)
+    return accuracy
