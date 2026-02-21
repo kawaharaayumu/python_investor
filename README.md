@@ -7,3 +7,4 @@ pythonで株価を可視化する
 - deactivate
 - pip freeze > requirements.txt
 - pip install -r requirements.txt
+- python -m streamlit run app.py
