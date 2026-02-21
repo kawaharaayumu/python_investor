@@ -93,42 +93,72 @@ with st.sidebar.expander("➕ 自分専用リストに追加"):
 # --- メイン表示 ---
 if search_button or ticker:
     st.subheader(f"📊 {display_name} ({ticker})")
+    
+    # チャート用のデータ取得
     df = yf.download(ticker, start=start_date, end=end_date)
+    
     if not df.empty:
         # 履歴更新
-        if (display_name, ticker) not in st.session_state['history']:
-            st.session_state['history'].insert(0, (display_name, ticker))
+        hist_item = (display_name, ticker)
+        if hist_item not in st.session_state['history']:
+            st.session_state['history'].insert(0, hist_item)
             st.session_state['history'] = st.session_state['history'][:5]
         
-        # カラム調整
-        if hasattr(df.columns, 'levels'): df.columns = df.columns.get_level_values(0)
+        # MultiIndex対策
+        if hasattr(df.columns, 'levels'):
+            df.columns = df.columns.get_level_values(0)
+
+        # --- ボリンジャーバンドの計算 (表示用) ---
+        df['MA25_display'] = df['Close'].rolling(25).mean()
+        df['STD25_display'] = df['Close'].rolling(25).std()
+        df['Upper'] = df['MA25_display'] + (df['STD25_display'] * 2)
+        df['Lower'] = df['MA25_display'] - (df['STD25_display'] * 2)
         
-        # 描画
-        fig, _ = mpf.plot(df, type='candle', style='charles', mav=(5, 25), volume=True, returnfig=True, figsize=(15, 8))
+        # 描画用の追加設定（ボリンジャーバンドの線を設定）
+        add_plots = [
+            mpf.make_addplot(df['Upper'], color='gray', alpha=0.3),
+            mpf.make_addplot(df['Lower'], color='gray', alpha=0.3),
+        ]
+
+        # 描画実行
+        fig, _ = mpf.plot(
+            df, type='candle', style='charles', 
+            mav=(5, 25, 75), addplot=add_plots, 
+            volume=True, returnfig=True, figsize=(15, 8)
+        )
         st.pyplot(fig)
         
+        # --- AI予測セクション ---
         st.markdown("---")
-        st.subheader("🤖 AIトレンド予測")
-        st.write("過去5年間の値動きパターンから、明日の「上昇・下落」を予測します。")
+        st.subheader("🤖 AIトレンド予測 & 判断根拠 (XAI)")
+        st.write("過去5年間のパターンから、明日の騰落と「何を重視したか」を表示します。")
 
-        # 予測の実行（重い処理なのでロード中を表示）
-        with st.spinner('AIがパターンを分析中...'):
+        with st.spinner('AIが判断理由を分析中...'):
             try:
-                pred_result, confidence = predictor.run_prediction(ticker)
+                # predictor.py から「予測、自信度、重要度」を受け取る
+                pred_result, confidence, importances = predictor.run_prediction(ticker)
             
                 if pred_result is not None:
-                    c1, c2 = st.columns(2)
-                    with c1:
+                    col_res, col_imp = st.columns([1, 2]) # 左に結果、右にグラフ
+                    
+                    with col_res:
                         if pred_result == 1:
-                            st.success("### 予想：📈 上昇 (BUY)")
+                            st.success("### 予想：📈 上昇")
                         else:
-                            st.error("### 予想：📉 下落 (SELL)")
-
-                    with c2:
+                            st.error("### 予想：📉 下落")
                         st.metric("予測の自信度", f"{confidence*100:.1f} %")
-                        st.progress(confidence) # 視覚的なバーを表示
+                        st.progress(float(confidence))
+
+                    with col_imp:
+                        st.write("▼ AIが重視した指標")
+                        # 重要度をデータフレームにしてグラフ化
+                        imp_df = pd.DataFrame({
+                            '指標': importances.keys(),
+                            '重要度': importances.values()
+                        }).sort_values(by='重要度', ascending=True)
+                        st.bar_chart(data=imp_df, x='指標', y='重要度', horizontal=True)
                 
-                    st.info("💡 **解説:** このモデルは移動平均との乖離や直近のボラティリティを元に判断しています。")
+                    st.caption("※BB_Position: ボリンジャーバンド内の位置 / MA_Gap: 移動平均乖離 / Return: 前日比")
                 else:
                     st.warning("データ不足のため予測できませんでした。")
             except Exception as e:
