@@ -134,15 +134,26 @@ if search_button or ticker:
         df['Upper'] = df['MA25_display'] + (df['STD25_display'] * 2)
         df['Lower'] = df['MA25_display'] - (df['STD25_display'] * 2)
         
-        # 描画用の追加設定（ボリンジャーバンドの線を設定）
-        add_plots = [
-            mpf.make_addplot(df['Upper'], color='gray', alpha=0.3),
-            mpf.make_addplot(df['Lower'], color='gray', alpha=0.3),
-        ]
+        # 【重要】データが25日分以上あり、ボリンジャーバンドが計算できているかチェック
+        add_plots = []
+        if not df['Upper'].isnull().all():
+            # NaNが含まれる行（最初の24日間など）をグラフ描画から除外する
+            # または addplot 側でデータを整える
+            df_plot = df.dropna(subset=['Upper', 'Lower'])
+            
+            if not df_plot.empty:
+                add_plots = [
+                    mpf.make_addplot(df_plot['Upper'], color='gray', alpha=0.3),
+                    mpf.make_addplot(df_plot['Lower'], color='gray', alpha=0.3),
+                ]
+            else:
+                df_plot = df # 描画対象を元に戻す
+        else:
+            df_plot = df
 
-        # 描画実行
+        # 描画実行 (df ではなく df_plot を使う)
         fig, _ = mpf.plot(
-            df, type='candle', style='charles', 
+            df_plot, type='candle', style='charles', 
             mav=(5, 25, 75), addplot=add_plots, 
             volume=True, returnfig=True, figsize=(15, 8)
         )
