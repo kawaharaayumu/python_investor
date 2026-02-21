@@ -3,3 +3,4 @@ mplfinance
 streamlit
 matplotlib
 pandas
+streamlit-local-storage
