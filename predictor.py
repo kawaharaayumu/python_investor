@@ -92,3 +92,17 @@ def run_backtest(ticker):
     
     accuracy = sum(results) / len(results)
     return accuracy
+
+def get_stock_info(ticker):
+    t = yf.Ticker(ticker)
+    info = t.info
+    
+    data = {
+        "PER": info.get("trailingPE", "---"),
+        "PBR": info.get("priceToBook", "---"),
+        "配当利回り": info.get("dividendYield", 0),
+        "時価総額": info.get("marketCap", "---"),
+        "ROE": info.get("returnOnEquity", "---"),
+        "通貨": info.get("currency", "JPY") # デフォルトは円にしておく
+    }
+    return data

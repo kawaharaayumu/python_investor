@@ -224,6 +224,67 @@ if search_button or ticker:
         )
         st.pyplot(fig)
         
+        # --- 企業情報の取得 ---
+        stock_info = predictor.get_stock_info(ticker)
+
+        st.subheader(f"🏢 {display_name} の企業分析指標")
+
+        # 4つのカラムを作って数字を並べる
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            per = stock_info["PER"]
+            st.metric("PER (株価収益率)", f"{per:.2f} 倍" if per != "---" else "---")
+            
+        with col2:
+            pbr = stock_info["PBR"]
+            st.metric("PBR (株価純資産倍率)", f"{pbr:.2f} 倍" if pbr != "---" else "---")
+
+        with col3:
+            yield_val = stock_info["配当利回り"]
+            st.metric("配当利回り", f"{yield_val:.2f} %" if yield_val != 0 else "0.00 %")
+
+        with col4:
+            roe = stock_info["ROE"]
+            st.metric("ROE (自己資本利益率)", f"{roe*100:.2f} %" if roe != "---" else "---")
+            
+        with col5:
+            cap = stock_info["時価総額"]
+            currency = stock_info["通貨"]
+            
+            if cap != "---" and cap is not None:
+                if currency == "JPY":
+                    # 日本円の場合：1億円(10^8)単位
+                    unit_val = 100_000_000
+                    unit_name = "億円"
+                    mega_unit_name = "兆円"
+                else:
+                    # 米ドル等の場合：1億ドル(10^8)単位
+                    # ※海外は1M, 1B, 1T単位が一般的ですが、日本の感覚に合わせるなら「億ドル」
+                    unit_val = 100_000_000
+                    unit_name = f"億{currency}"
+                    mega_unit_name = f"兆{currency}"
+
+                main_val = cap / unit_val
+                
+                if main_val >= 10000:
+                    display_cap = f"{main_val/10000:.2f} {mega_unit_name}"
+                else:
+                    display_cap = f"{main_val:.1f} {unit_name}"
+            else:
+                display_cap = "---"
+                
+            st.metric("時価総額", display_cap)
+
+        # 補足解説の追加
+        with st.expander("💡 これらの指標はどう見ればいい？"):
+            st.write("""
+            - **PER**: 15倍が平均的。これより低いと「割安」、高いと「期待が大きい（または割高）」。
+            - **PBR**: 1倍を割ると、会社の資産価値よりも株価が安い「超割安」状態です。
+            - **配当利回り**: 3%を超えると高配当と言われます。
+            - **ROE**: 8~10%以上あると、効率よく稼いでいる「優良企業」とみなされます。
+            """)
+        
         # --- AI予測セクション ---
         st.markdown("---")
         st.subheader("🤖 AIトレンド予測 & 判断根拠 (XAI)")
