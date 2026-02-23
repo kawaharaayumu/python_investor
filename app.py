@@ -341,21 +341,22 @@ if search_button or ticker:
                 st.error(f"予測中にエラーが発生しました: {e}")
                 
         # --- predictor.py の run_prediction 呼び出しの後に追記 ---
-        with st.spinner('過去の的中率を検証中...'):
-            backtest_acc = predictor.run_backtest(ticker)
+        if st.button("過去の的中率を検証する"):
+            with st.spinner('過去の的中率を検証中...'):
+                backtest_acc = predictor.run_backtest(ticker)
 
-            if backtest_acc is not None:
-                # 視覚的に「勝率」として表示
-                st.write("---")
-                st.subheader("🎯 過去のシミュレーション結果")
-                
-                c1, c2 = st.columns([1, 2])
-                with c1:
-                    st.metric("過去100日の的中率", f"{backtest_acc*100:.1f} %")
-                with c2:
-                    if backtest_acc > 0.55:
-                        st.success("✅ この銘柄はAIの予測パターンが比較的適合しています。")
-                    elif backtest_acc > 0.45:
-                        st.warning("⚠️ 予測の的中率は平均的です。他の指標も併用してください。")
-                    else:
-                        st.error("❌ 現在の相場はこのAIモデルが苦手とする不規則な動きをしています。")
+                if backtest_acc is not None:
+                    # 視覚的に「勝率」として表示
+                    st.write("---")
+                    st.subheader("🎯 過去のシミュレーション結果")
+                    
+                    c1, c2 = st.columns([1, 2])
+                    with c1:
+                        st.metric("過去100日の的中率", f"{backtest_acc*100:.1f} %")
+                    with c2:
+                        if backtest_acc > 0.55:
+                            st.success("✅ この銘柄はAIの予測パターンが比較的適合しています。")
+                        elif backtest_acc > 0.45:
+                            st.warning("⚠️ 予測の的中率は平均的です。他の指標も併用してください。")
+                        else:
+                            st.error("❌ 現在の相場はこのAIモデルが苦手とする不規則な動きをしています。")

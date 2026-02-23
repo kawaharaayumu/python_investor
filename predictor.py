@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
+import streamlit as st
 
 def prepare_features(df, per=None, pbr=None):
     """株価データと財務指標から特徴量を計算する"""
@@ -51,6 +52,7 @@ def run_prediction(ticker):
     
     return prediction, confidence, importances, latest_values
 
+@st.cache_data(ttl=3600)  # 1時間(3600秒)はデータを再利用する
 def run_backtest(ticker):
     """過去100日間の予測的中率を計算する"""
     # 1. 先に企業情報を取得（PER/PBR用）
@@ -85,6 +87,7 @@ def run_backtest(ticker):
     accuracy = sum(results) / len(results)
     return accuracy
 
+@st.cache_data(ttl=3600)  # 1時間(3600秒)はデータを再利用する
 def get_stock_info(ticker):
     t = yf.Ticker(ticker)
     info = t.info
