@@ -176,6 +176,9 @@ if search_button or ticker:
     df = yf.download(ticker, start=start_date, end=end_date)
     
     if not df.empty:
+        # --- 企業情報の取得 (グラフ描画に使うので先に取得) ---
+        stock_info = predictor.get_stock_info(ticker)
+        
         # 履歴更新
         hist_item = (display_name, ticker)
         if hist_item not in st.session_state['history']:
@@ -186,69 +189,99 @@ if search_button or ticker:
         if hasattr(df.columns, 'levels'):
             df.columns = df.columns.get_level_values(0)
 
-        # --- ボリンジャーバンドの計算 (表示用) ---
+        # --- ボリンジャーバンドの計算 ---
         df['MA25_display'] = df['Close'].rolling(25).mean()
         df['STD25_display'] = df['Close'].rolling(25).std()
         df['Upper'] = df['MA25_display'] + (df['STD25_display'] * 2)
         df['Lower'] = df['MA25_display'] - (df['STD25_display'] * 2)
         
-        # 【重要】データが25日分以上あり、ボリンジャーバンドが計算できているかチェック
+        df_plot = df.dropna(subset=['Upper', 'Lower']) if not df['Upper'].isnull().all() else df
+        
         add_plots = []
-        if not df['Upper'].isnull().all():
-            # NaNが含まれる行（最初の24日間など）をグラフ描画から除外する
-            # または addplot 側でデータを整える
-            df_plot = df.dropna(subset=['Upper', 'Lower'])
-            
-            if not df_plot.empty:
-                add_plots = [
-                    mpf.make_addplot(df_plot['Upper'], color='gray', alpha=0.3),
-                    mpf.make_addplot(df_plot['Lower'], color='gray', alpha=0.3),
-                ]
-            else:
-                df_plot = df # 描画対象を元に戻す
-        else:
-            df_plot = df
+        if not df_plot.empty:
+            # ボリンジャーバンド追加
+            add_plots.append(mpf.make_addplot(df_plot['Upper'], color='gray', alpha=0.3))
+            add_plots.append(mpf.make_addplot(df_plot['Lower'], color='gray', alpha=0.3))
 
-        # --- 移動平均線の色を個別に指定する ---
-        # mavcolors で 5日, 25日, 75日 の色を順番に指定します
+        # --- 配当マーク（垂直線）の準備 ---
+        div_history = stock_info.get("配当履歴", pd.Series())
+        vlines_list = []
+        div_label = "配当データなし"
+
+        if not div_history.empty:
+            # タイムゾーンの除去
+            if div_history.index.tz is not None:
+                div_history.index = div_history.index.tz_localize(None)
+            
+            plot_index = df_plot.index
+            if plot_index.tz is not None:
+                plot_index = plot_index.tz_localize(None)
+
+            # グラフ期間内の配当を抽出
+            relevant_divs = div_history[(div_history.index >= plot_index[0]) & 
+                                        (div_history.index <= plot_index[-1])]
+            
+            if not relevant_divs.empty:
+                vlines_list = [date for date in relevant_divs.index]
+                last_div_date = relevant_divs.index[-1].strftime('%Y-%m-%d')
+                div_label = f"直近の配当権利落ち日: {last_div_date}"
+            else:
+                div_label = "期間内に配当なし"
+
+        # --- グラフ描画 ---
         fig, axlist = mpf.plot(
             df_plot, 
             type='candle', 
-            style='yahoo',    # ベースのスタイル
+            style='yahoo',
             mav=(5, 25, 75), 
-            mavcolors=('blue', 'red', 'green'), # ここで色を指定！
+            mavcolors=('blue', 'red', 'green'),
             addplot=add_plots, 
+            # 垂直線をオレンジの実線に変更して視認性アップ
+            vlines=dict(vlines=vlines_list, colors='orange', alpha=0.7, linestyle='-'),
             volume=True, 
             returnfig=True, 
             figsize=(15, 8)
         )
+        
+        # タイトルは英数字のみにして文字化けを防止
+        axlist[0].set_title(f"{ticker} Analysis", fontsize=16, loc='left')
+        
         st.pyplot(fig)
         
-        # --- 企業情報の取得 ---
-        stock_info = predictor.get_stock_info(ticker)
-
+        # --- 企業情報の表示 ---
         st.subheader(f"🏢 {display_name} の企業分析指標")
 
-        # 4つのカラムを作って数字を並べる
-        col1, col2, col3, col4, col5 = st.columns(5)
-
+        # 【1段目】
+        col1, col2, col3 = st.columns(3)
         with col1:
             per = stock_info["PER"]
             st.metric("PER (株価収益率)", f"{per:.2f} 倍" if per != "---" else "---")
-            
         with col2:
             pbr = stock_info["PBR"]
             st.metric("PBR (株価純資産倍率)", f"{pbr:.2f} 倍" if pbr != "---" else "---")
-
         with col3:
             yield_val = stock_info["配当利回り"]
-            st.metric("配当利回り", f"{yield_val:.2f} %" if yield_val != 0 else "0.00 %")
+            d_yield = yield_val * 100 if (yield_val is not None and yield_val < 1.0) else (yield_val if yield_val else 0)
+            
+            # 配当日付の情報をラベルに統合
+            if not div_history.empty:
+                last_div_date = div_history.index[-1].strftime('%Y/%m/%d')
+                label_text = f"配当利回り ({last_div_date})"
+            else:
+                label_text = "配当利回り"
+                
+            st.metric(label_text, f"{d_yield:.2f} %")
 
+        # 少し隙間を空ける（任意）
+        st.write("")
+
+        # 【2段目】
+        col4, col5, col6 = st.columns(3)
         with col4:
             roe = stock_info["ROE"]
             st.metric("ROE (自己資本利益率)", f"{roe*100:.2f} %" if roe != "---" else "---")
-            
         with col5:
+            # 時価総額表示のロジック
             cap = stock_info["時価総額"]
             currency = stock_info["通貨"]
             
@@ -259,12 +292,11 @@ if search_button or ticker:
                     unit_name = "億円"
                     mega_unit_name = "兆円"
                 else:
-                    # 米ドル等の場合：1億ドル(10^8)単位
-                    # ※海外は1M, 1B, 1T単位が一般的ですが、日本の感覚に合わせるなら「億ドル」
+                    # 米ドル等の場合：1億(10^8)単位
                     unit_val = 100_000_000
                     unit_name = f"億{currency}"
                     mega_unit_name = f"兆{currency}"
-
+                
                 main_val = cap / unit_val
                 
                 if main_val >= 10000:
@@ -275,14 +307,39 @@ if search_button or ticker:
                 display_cap = "---"
                 
             st.metric("時価総額", display_cap)
+        with col6:
+            # EBITDA
+            ebitda = stock_info.get("EBITDA", "---")
+            if ebitda != "---" and ebitda is not None:
+                ebitda_val = ebitda / 100_000_000
+                ebitda_display = f"{ebitda_val/10000:.1f} 兆{currency}" if ebitda_val >= 10000 else f"{ebitda_val:.1f} 億{currency}"
+            else:
+                ebitda_display = "---"
+            st.metric("EBITDA (稼ぐ力)", ebitda_display)
 
-        # 補足解説の追加
-        with st.expander("💡 これらの指標はどう見ればいい？"):
-            st.write("""
-            - **PER**: 15倍が平均的。これより低いと「割安」、高いと「期待が大きい（または割高）」。
-            - **PBR**: 1倍を割ると、会社の資産価値よりも株価が安い「超割安」状態です。
-            - **配当利回り**: 3%を超えると高配当と言われます。
-            - **ROE**: 8~10%以上あると、効率よく稼いでいる「優良企業」とみなされます。
+        # IRリンクボタン
+        ir_url = stock_info.get("IRサイト")
+        if ir_url:
+            st.link_button(f"🔗 {display_name} 公式IRサイトへ", ir_url)
+
+        # 補足解説のアップデート
+        with st.expander("💡 投資指標の読み方・活用ガイド"):
+            st.markdown("""
+            ### 1. 割安さを測る（バリュー指標）
+            - **PER (株価収益率)**: 15倍が目安。IT・成長株は30倍以上になることも多いですが、製造業などで10倍を切ると「超割安」と判断されます。
+            - **PBR (株価純資産倍率)**: 1倍が解散価値（底値）の目安。1倍を割っている銘柄は、理論上、会社を解散して資産を分けた方が得なほど割安です。
+
+            ### 2. 稼ぐ力と効率（クオリティ指標）
+            - **ROE (自己資本利益率)**: 株主のお金をどれだけ効率よく増やしたか。**8〜10%以上**なら合格点。日本株でも重視される最重要指標の一つです。
+            - **EBITDA (本業の稼ぐ力)**: 税金や金利、設備の減価償却費を引く前の利益。**「国による税制の違い」や「巨額の設備投資」の影響を排除**できるため、グローバル企業同士を比較する際に重宝します。
+
+            ### 3. 株主への還元（インカム指標）
+            - **配当利回り**: 3%を超えると高配当。**オレンジ色の垂直線（配当権利落ち日）**の後は、配当を受け取る権利がなくなるため、理論上、配当分だけ株価が下落する傾向があります。
+
+            ---
+            ### 💡 プロの視点：合わせ技チェック
+            - **「低PER × 高ROE」**: 効率よく稼いでいるのに、市場からはまだ評価されていない「お宝株」の可能性があります。
+            - **「PBR 1倍割れ × EBITDA成長」**: 資産価値は無視されているが、本業の稼ぐ力は伸びている、反発期待の強い銘柄です。
             """)
         
         # --- AI予測セクション ---

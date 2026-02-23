@@ -92,12 +92,20 @@ def get_stock_info(ticker):
     t = yf.Ticker(ticker)
     info = t.info
     
+    # 配当履歴の取得（グラフ重畳用）
+    # .dividends は pandas.Series で返ってきます
+    dividends = t.dividends
+    
     data = {
         "PER": info.get("trailingPE", "---"),
         "PBR": info.get("priceToBook", "---"),
         "配当利回り": info.get("dividendYield", 0),
         "時価総額": info.get("marketCap", "---"),
         "ROE": info.get("returnOnEquity", "---"),
-        "通貨": info.get("currency", "JPY") # デフォルトは円にしておく
+        "通貨": info.get("currency", "JPY"),
+        # --- 追加項目 ---
+        "IRサイト": info.get("irWebsite", ""),
+        "EBITDA": info.get("ebitda", "---"),
+        "配当履歴": dividends # グラフ用
     }
     return data
