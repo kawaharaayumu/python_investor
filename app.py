@@ -7,6 +7,7 @@ import os
 import numpy as np
 from streamlit_local_storage import LocalStorage
 import predictor
+import explain_string
 
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
 
@@ -42,36 +43,24 @@ if 'active_ticker' not in st.session_state:
     st.session_state['active_ticker'] = None
 if 'active_name' not in st.session_state:
     st.session_state['active_name'] = None
+# 履歴からの選択状態を管理する変数
+if 'selected_from_history' not in st.session_state:
+    st.session_state['selected_from_history'] = []
 
 st.title("Stock Price Analyzer 📈")
 
 # --- 💡 グラフの見方ガイド ---
 with st.expander("📖 グラフの見方・用語解説"):
-    st.markdown("""
-    ### 1. ローソク足チャートの詳細
-    1本の棒（ローソク）が、ある期間（1日）の「始値・高値・安値・終値」を表します。
-    - **本体（太い部分）**: **「始値」と「終値」**の差。緑は上昇、赤は下落。
-    - **ヒゲ（細い線）**: その日の**「高値」と「安値」**。
-    ### 2. 移動平均線 (MA) の色
-    - <span style="color:#0000FF">■</span> **5日線**: 青色。短期的な勢い。
-    - <span style="color:#FF0000">■</span> **25日線**: 赤色。1ヶ月の平均。
-    - <span style="color:#00FF00">■</span> **75日線**: 緑色。3ヶ月のトレンド。
-    ### 3. 下段：出来高（Volume）
-    売買の活発さ。株価上昇時に増えていれば上昇に信頼性があります。
-    ### 4. ボリンジャーバンド (グレーの境界線)
-    株価が統計的に収まりやすい枠。±2σを反転や加速の目安にします。
-    ### 5. 配当権利落ち日 (オレンジの垂直線)
-    チャート上のオレンジ色の線は配当落ち日です。この日以降、株価が調整されやすくなります。
-    """, unsafe_allow_html=True)
+    st.markdown(explain_string.how_to_watch, unsafe_allow_html=True)
 
 # --- サイドバー ---
 st.sidebar.header("🔍 銘柄検索")
 
 # 【UX改善】検索ボックス
-# multiselectの値を st.session_state['main_selector'] で制御します
 selected_list = st.sidebar.multiselect(
     "銘柄を選択（入力して検索）",
     options=full_df['display'].tolist(),
+    default=st.session_state['selected_from_history'],
     max_selections=1,
     placeholder="銘柄名を入力してください...",
     key="main_selector" 
@@ -86,39 +75,34 @@ st.sidebar.subheader("🕒 最近見た銘柄")
 
 if st.session_state['history']:
     for h_name, h_code in st.session_state['history']:
-        # 履歴ボタンが押された時
         if st.sidebar.button(f"{h_name} ({h_code})", key=f"h_{h_code}"):
-            # 1. 検索ボックスの「表示」だけを書き換える
             h_display = full_df[full_df['code'] == h_code]['display'].iloc[0]
-            st.session_state['main_selector'] = [h_display]
-            # 2. 画面を再描画（これで入力ボックスに名前が入る）
-            # ここでは active_ticker は書き換えないのでチャートは更新されません
+            st.session_state['selected_from_history'] = [h_display]
             st.rerun()
 else:
     st.sidebar.write("履歴はまだありません")
 
-# --- 銘柄確定ロジック (ここがUXの核心) ---
+# --- 銘柄確定ロジック ---
 if selected_list:
     selected_display = selected_list[0]
+    st.session_state['selected_from_history'] = [selected_display]
+    
     target_row = full_df[full_df['display'] == selected_display].iloc[0]
     
-    # 【重要】「チャートを更新」ボタンが押された時だけ、画面上の銘柄を確定させる
     if search_button:
         st.session_state['active_ticker'] = target_row['code']
         st.session_state['active_name'] = target_row['name']
         
-        # 履歴の更新
         hist_item = (st.session_state['active_name'], st.session_state['active_ticker'])
         if hist_item in st.session_state['history']:
             st.session_state['history'].remove(hist_item)
         st.session_state['history'].insert(0, hist_item)
         st.session_state['history'] = st.session_state['history'][:5]
 else:
-    # 検索ボックスが「×」で消されたら、画面もリセット
     st.session_state['active_ticker'] = None
     st.session_state['active_name'] = None
+    st.session_state['selected_from_history'] = []
 
-# 最終的に描画に使う変数
 ticker = st.session_state['active_ticker']
 display_name = st.session_state['active_name']
 
@@ -152,7 +136,6 @@ if ticker:
         if hasattr(df.columns, 'levels'):
             df.columns = df.columns.get_level_values(0)
 
-        # テクニカル指標計算
         df['MA25_display'] = df['Close'].rolling(25).mean()
         df['STD25_display'] = df['Close'].rolling(25).std()
         df['Upper'] = df['MA25_display'] + (df['STD25_display'] * 2)
@@ -166,7 +149,6 @@ if ticker:
             add_plots.append(mpf.make_addplot(df_plot['Upper'], color='gray', alpha=0.3))
             add_plots.append(mpf.make_addplot(df_plot['Lower'], color='gray', alpha=0.3))
 
-        # 配当マーク
         div_history = stock_info.get("配当履歴", pd.Series())
         vlines_list = []
         if not div_history.empty:
@@ -176,7 +158,6 @@ if ticker:
             relevant_divs = div_history[(div_history.index >= p_idx[0]) & (div_history.index <= p_idx[-1])]
             vlines_list = [date for date in relevant_divs.index]
 
-        # 描画
         plot_kwargs = dict(type='candle', style='yahoo', mav=(5, 25, 75), mavcolors=('blue', 'red', 'green'),
                            volume=True, returnfig=True, figsize=(15, 8))
         if add_plots: plot_kwargs['addplot'] = add_plots
@@ -227,18 +208,7 @@ if ticker:
         if ir_url: st.link_button(f"🔗 {display_name} 公式IRサイトへ", ir_url)
         
         with st.expander("💡 投資指標の読み方・活用ガイド"):
-            st.markdown("""
-            ### 1. 割安さを測る（バリュー指標）
-            - **PER**: 15倍が目安。製造業などで10倍を切ると「超割安」。
-            - **PBR**: 1倍が底値の目安。1倍を割ると資産価値より安い状態。
-            ### 2. 稼ぐ力と効率（クオリティ指標）
-            - **ROE**: **8〜10%以上**なら合格点。効率よく稼いでいる証拠。
-            - **EBITDA**: 本業の稼ぐ力。設備投資の影響を除外して評価可能。
-            ### 3. 株主への還元（インカム指標）
-            - **配当利回り**: 3%超で高配当。オレンジ垂直線後は配当落ちによる下落に注意。
-            ---
-            **「低PER × 高ROE」**などは、効率が良いのに割安な「お宝株」の可能性があります。
-            """)
+            st.markdown(explain_string.stock_explanation, unsafe_allow_html=True)
 
         # --- AI予測 ---
         st.markdown("---")
@@ -252,6 +222,7 @@ if ticker:
                     st.info(f"🗨️ **AIの解説:** {max(imps, key=imps.get)} を最重視しました。")
                     col_ai1, col_ai2 = st.columns([1, 2])
                     with col_ai1:
+                        st.write("▼ 指標の現在値")
                         st.write(f"- 5日乖離: {vals['MA5_Gap']*100:.1f}%")
                         st.write(f"- BB位置: {vals['BB_Pos']:.2f}")
                     with col_ai2:
