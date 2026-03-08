@@ -232,21 +232,35 @@ if not df.empty:
             else:
                 div_label = "期間内に配当なし"
 
-        # --- グラフ描画 ---
-        # 重要：要素が空の場合は引数に None を渡すようにガードをかける
-        fig, axlist = mpf.plot(
-            df_plot, 
+# --- グラフ描画の設定 ---
+        # 基本の引数を辞書にまとめる
+        plot_kwargs = dict(
             type='candle', 
             style='yahoo',
             mav=(5, 25, 75), 
             mavcolors=('blue', 'red', 'green'),
-            addplot=add_plots if len(add_plots) > 0 else None, 
-            vlines=dict(vlines=vlines_list, colors='orange', alpha=0.7, linestyle='-') if len(vlines_list) > 0 else None,
             volume=True, 
             returnfig=True, 
             figsize=(15, 8)
         )
+
+        # 追加プロット（ボリンジャーバンド）がある場合のみ追加
+        if add_plots:
+            plot_kwargs['addplot'] = add_plots
+
+        # 垂直線（配当）がある場合のみ追加
+        if vlines_list:
+            plot_kwargs['vlines'] = dict(
+                vlines=vlines_list, 
+                colors='orange', 
+                alpha=0.7, 
+                linestyle='-'
+            )
+
+        # 実行
+        fig, axlist = mpf.plot(df_plot, **plot_kwargs)
         
+        # タイトル設定
         axlist[0].set_title(f"{ticker} Analysis", fontsize=16, loc='left')
         st.pyplot(fig)        
         # --- 企業情報の表示 ---
