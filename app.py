@@ -74,7 +74,7 @@ if ticker:
         if hasattr(df.columns, 'levels'):
             df.columns = df.columns.get_level_values(0)
 
-        # チャート作成
+        # チャートデータの準備
         df['MA25_display'] = df['Close'].rolling(25).mean()
         df['STD25_display'] = df['Close'].rolling(25).std()
         df['Upper'] = df['MA25_display'] + (df['STD25_display'] * 2)
@@ -83,22 +83,47 @@ if ticker:
         has_bands = not df['Upper'].isnull().all()
         df_plot = df.dropna(subset=['Upper', 'Lower']) if has_bands else df
 
-        add_plots = [mpf.make_addplot(df_plot['Upper'], color='gray', alpha=0.3),
-                     mpf.make_addplot(df_plot['Lower'], color='gray', alpha=0.3)] if has_bands else []
+        # --- プロット設定の構築 ---
+        plot_params = {
+            'type': 'candle',
+            'style': 'yahoo',
+            'mav': (5, 25, 75),
+            'mavcolors': ('blue', 'red', 'green'),
+            'volume': True,
+            'returnfig': True,
+            'figsize': (15, 8)
+        }
 
+        # ボリンジャーバンドの追加
+        if has_bands:
+            plot_params['addplot'] = [
+                mpf.make_addplot(df_plot['Upper'], color='gray', alpha=0.3),
+                mpf.make_addplot(df_plot['Lower'], color='gray', alpha=0.3)
+            ]
+
+        # 配当落ち日の垂直線設定
         div_history = stock_info.get("配当履歴", pd.Series())
-        vlines_list = []
         if not div_history.empty:
             if div_history.index.tz is not None:
                 div_history.index = div_history.index.tz_localize(None)
             p_idx = df_plot.index.tz_localize(None) if df_plot.index.tz else df_plot.index
+            # 描画期間内の配当落ち日をリスト化
             vlines_list = [date for date in div_history.index if p_idx[0] <= date <= p_idx[-1]]
+            
+            if vlines_list:
+                # 型の不一致を防ぐため明示的に変換
+                vlines_list = pd.to_datetime(vlines_list).tolist()
+                plot_params['vlines'] = dict(vlines=vlines_list, colors='orange', alpha=0.7)
 
-        fig, axlist = mpf.plot(df_plot, type='candle', style='yahoo', mav=(5, 25, 75), 
-                               mavcolors=('blue', 'red', 'green'), volume=True, 
-                               addplot=add_plots, returnfig=True, figsize=(15, 8),
-                               vlines=dict(vlines=vlines_list, colors='orange', alpha=0.7) if vlines_list else None)
-        st.pyplot(fig)
+        # チャート描画実行
+        try:
+            fig, axlist = mpf.plot(df_plot, **plot_params)
+            st.pyplot(fig)
+        except Exception as e:
+            st.error(f"チャート描画中にエラーが発生しました: {e}")
+            # エラー時は最小構成で再試行
+            fig, axlist = mpf.plot(df_plot, type='candle', style='yahoo', returnfig=True)
+            st.pyplot(fig)
 
         # 指標表示
         st.subheader(f"🏢 {display_name} の企業分析指標")
