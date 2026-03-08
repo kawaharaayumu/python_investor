@@ -11,7 +11,8 @@ def render_sidebar(full_df, localS, custom_stocks):
     if 'history' not in st.session_state:
         st.session_state['history'] = []
 
-    # 2. 銘柄検索（マルチセレクト）
+    # 2. 銘柄検索（multiselectを単一選択として使用）
+    # 履歴ボタンからこの変数を書き換えることで、自動入力を実現します
     selected_list = st.sidebar.multiselect(
         "銘柄を選択（入力して検索）",
         options=full_df['display'].tolist(),
@@ -22,6 +23,7 @@ def render_sidebar(full_df, localS, custom_stocks):
     )
 
     # 3. チャート更新ボタン
+    # このボタンを押すまで active_ticker は更新されません
     search_button = st.sidebar.button("📊 チャートを更新", type="primary")
 
     # 4. 最近見た銘柄（履歴）
@@ -30,7 +32,9 @@ def render_sidebar(full_df, localS, custom_stocks):
     if st.session_state['history']:
         for h_name, h_code in st.session_state['history']:
             if st.sidebar.button(f"{h_name} ({h_code})", key=f"h_{h_code}"):
+                # 該当銘柄の表示名を取得
                 h_display = full_df[full_df['code'] == h_code]['display'].iloc[0]
+                # セッション状態を更新して再描画（入力ボックスに値が入る）
                 st.session_state['selected_from_history'] = [h_display]
                 st.rerun()
     else:
