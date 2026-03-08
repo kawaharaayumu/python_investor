@@ -175,7 +175,7 @@ if search_button or ticker:
     # チャート用のデータ取得
     df = yf.download(ticker, start=start_date, end=end_date)
     
-    if not df.empty:
+if not df.empty:
         # --- 企業情報の取得 (グラフ描画に使うので先に取得) ---
         stock_info = predictor.get_stock_info(ticker)
         
@@ -195,11 +195,17 @@ if search_button or ticker:
         df['Upper'] = df['MA25_display'] + (df['STD25_display'] * 2)
         df['Lower'] = df['MA25_display'] - (df['STD25_display'] * 2)
         
-        df_plot = df.dropna(subset=['Upper', 'Lower']) if not df['Upper'].isnull().all() else df
-        
+        # バンドが計算できている行があるかチェック
+        has_bands = not df['Upper'].isnull().all()
+        if has_bands:
+            df_plot = df.dropna(subset=['Upper', 'Lower'])
+        else:
+            df_plot = df
+
+        # --- 追加プロット（バンド）の作成 ---
         add_plots = []
-        if not df_plot.empty:
-            # ボリンジャーバンド追加
+        # データが空でなく、かつバンドが存在する場合のみ追加
+        if not df_plot.empty and has_bands:
             add_plots.append(mpf.make_addplot(df_plot['Upper'], color='gray', alpha=0.3))
             add_plots.append(mpf.make_addplot(df_plot['Lower'], color='gray', alpha=0.3))
 
@@ -209,7 +215,6 @@ if search_button or ticker:
         div_label = "配当データなし"
 
         if not div_history.empty:
-            # タイムゾーンの除去
             if div_history.index.tz is not None:
                 div_history.index = div_history.index.tz_localize(None)
             
@@ -217,7 +222,6 @@ if search_button or ticker:
             if plot_index.tz is not None:
                 plot_index = plot_index.tz_localize(None)
 
-            # グラフ期間内の配当を抽出
             relevant_divs = div_history[(div_history.index >= plot_index[0]) & 
                                         (div_history.index <= plot_index[-1])]
             
@@ -229,25 +233,22 @@ if search_button or ticker:
                 div_label = "期間内に配当なし"
 
         # --- グラフ描画 ---
+        # 重要：要素が空の場合は引数に None を渡すようにガードをかける
         fig, axlist = mpf.plot(
             df_plot, 
             type='candle', 
             style='yahoo',
             mav=(5, 25, 75), 
             mavcolors=('blue', 'red', 'green'),
-            addplot=add_plots, 
-            # 垂直線をオレンジの実線に変更して視認性アップ
-            vlines=dict(vlines=vlines_list, colors='orange', alpha=0.7, linestyle='-'),
+            addplot=add_plots if len(add_plots) > 0 else None, 
+            vlines=dict(vlines=vlines_list, colors='orange', alpha=0.7, linestyle='-') if len(vlines_list) > 0 else None,
             volume=True, 
             returnfig=True, 
             figsize=(15, 8)
         )
         
-        # タイトルは英数字のみにして文字化けを防止
         axlist[0].set_title(f"{ticker} Analysis", fontsize=16, loc='left')
-        
-        st.pyplot(fig)
-        
+        st.pyplot(fig)        
         # --- 企業情報の表示 ---
         st.subheader(f"🏢 {display_name} の企業分析指標")
 
