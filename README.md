@@ -8,3 +8,6 @@ pythonで株価を可視化する
 - pip freeze > requirements.txt
 - pip install -r requirements.txt
 - python -m streamlit run app.py
+
+# claude code系のコマンド
+- claude --model gemma4:e4b
